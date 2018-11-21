@@ -6,8 +6,7 @@ uses
   {$IFDEF UNIX}{$IFDEF UseCThreads}
   cthreads,
   {$ENDIF}{$ENDIF}
-  Classes, EditorConfigTypes
-  { you can add units after this };
+  Classes, EditorConfigTypes;
 
 procedure DumpEntry(en: TEditorEntry);
 begin

@@ -8,6 +8,11 @@ uses
   Classes, SysUtils;
 
 type
+  TTriBool = (
+    tbUnset, // unspecified (an editor default sould be used)
+    tbFalse, // false (specified)
+    tbTrue   // true (specified)
+  );
 
   { TEditorEntry }
 
@@ -20,8 +25,8 @@ type
     tab_width    : integer; //a whole number defining the number of columns used to represent a tab character. This defaults to the value of indent_size and doesn't usually need to be specified.
     end_of_line  : string;  //set to lf, cr, or crlf to control how line breaks are represented.
     charset      : string;  //set to latin1, utf-8, utf-8-bom, utf-16be or utf-16le to control the character set.
-    trim_trailing_whitespace : Boolean; //set to true to remove any whitespace characters preceding newline characters and false to ensure it doesn't.
-    insert_final_newline     : Boolean; //set to true to ensure file ends with a newline when saving and false to ensure it doesn't.
+    trim_trailing_whitespace : TTriBool; //set to true to remove any whitespace characters preceding newline characters and false to ensure it doesn't.
+    insert_final_newline     : TTriBool; //set to true to ensure file ends with a newline when saving and false to ensure it doesn't.
     constructor Create(const aname: string);
     property name: string read fname;
   end;
@@ -40,7 +45,7 @@ type
     constructor Create;
     destructor Destroy; override;
     function AddEntry(const aname: string): TEditorEntry;
-    property Entry[i: integer]: TEditorEntry read GetEntry;
+    property Entry[i: integer]: TEditorEntry read GetEntry; default;
     property Count: Integer read GetCount;
   end;
 
@@ -52,6 +57,20 @@ implementation
 
 uses
   EdConfIniUtils;
+
+function TryStrToTriBool(const S: string; out Value: TTriBool): Boolean;
+var
+  l : string;
+begin
+  if S = '' then Value := tbUnset
+  else begin
+    l := AnsiLowerCase(s);
+    if (l = '0') or (l = '0.0') or (l = 'false') then Value := tbFalse
+    else Value := tbTrue;
+  end;
+  Result := true;
+end;
+
 
 function LowKVToEditConfig(const lowkey, value: string; dst: TEditorEntry): Boolean;
 begin
@@ -73,10 +92,10 @@ begin
     dst.charset := dst.charset
   else if lowkey = 'trim_trailing_whitespace' then
     // set to true to remove any whitespace characters preceding newline characters and false to ensure it doesn't.
-    Result := TryStrToBool(value,  dst.trim_trailing_whitespace )
+    Result := TryStrToTriBool(value,  dst.trim_trailing_whitespace )
   else if lowkey = 'insert_final_newline' then
     // set to true to ensure file ends with a newline when saving and false to ensure it doesn't.
-    Result := TryStrToBool(value, dst.insert_final_newline)
+    Result := TryStrToTriBool(value, dst.insert_final_newline)
   else
     Result := false;
 end;
