@@ -9,7 +9,7 @@ uses
   //,IDEOptionsIntf
   //, IDEWindowIntf, ProjectIntf
   ,LazIDEIntf, SrcEditorIntf
-  ,editorConfigTypes, edConfGlob, editorConfigUtils
+  ,editorConfigTypes, editorConfigUtils
   ,LConvEncoding
   ,CodeCache // for TCodeBuffer
   ;
