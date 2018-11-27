@@ -25,8 +25,8 @@ type
   TECWatch = class(TObject)
     procedure OnEditorActive(Sender: TObject);
     procedure ApplyEditorConfig(ed : TSourceEditorInterface);
-    procedure ApplyToSynEdit(ec: TEditorEntry; ed: TSynEdit);
-    procedure ApplyToCodeBuffer(ec: TEditorEntry; buf: TCodeBuffer);
+    procedure ApplyToSynEdit(const ec: TLookupResult; ed: TSynEdit);
+    procedure ApplyToCodeBuffer(const ec: TLookupResult; buf: TCodeBuffer);
   end;
 
 var
@@ -47,40 +47,21 @@ var
   ctrl : TWinControl;
   cbuf : TObject;
 
-  ecfn : string;
-  ec: TEditorConfigFile;
-  pth  : string;
-  match : string;
+  rs : TLookupResult;
 begin
   ctrl := ed.EditorControl;
   cbuf := ed.CodeToolsBuffer;
 
   if not (ctrl is TSynEdit) then Exit;
 
-  pth := ExtractFilePath(ed.FileName);
-  ecfn := pth + '.editorconfig';
-
-  // todo: traverse parent directories until "root" is found
-  if not FileExists(ecfn) then Exit;
-
-  ec:=TEditorConfigFile.Create;
-  try
-    ReadFromFile(ec, ecfn);
-    match := Copy(ed.Filename, length(pth)+1, length(ed.FileName));
-    for i:=0 to ec.Count-1 do begin
-      if ECMatch( ec[i].name, match) then begin
-        ApplyToSynEdit( ec[i], TSynEdit(ctrl));
-        if cbuf is TCodeBuffer then
-          ApplyToCodeBuffer(ec[i], TCodeBuffer(cbuf));
-        Break;
-      end;
-    end;
-  finally
-    ec.Free;
+  if LookupEditorConfig(ed.FileName, rs) then begin
+    ApplyToSynEdit(rs, TSynEdit(ctrl));
+    if cbuf is TCodeBuffer then
+      ApplyToCodeBuffer(rs, TCodeBuffer(cbuf));
   end;
 end;
 
-procedure TECWatch.ApplyToSynEdit(ec: TEditorEntry; ed: TSynEdit);
+procedure TECWatch.ApplyToSynEdit(const ec: TLookupResult; ed: TSynEdit);
 var
   w: integer;
 begin
@@ -98,7 +79,7 @@ begin
     ed.Options := ed.Options - [eoTrimTrailingSpaces];
 end;
 
-procedure TECWatch.ApplyToCodeBuffer(ec: TEditorEntry; buf: TCodeBuffer);
+procedure TECWatch.ApplyToCodeBuffer(const ec: TLookupResult; buf: TCodeBuffer);
 var
   l : string;
 begin

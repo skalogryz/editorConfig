@@ -14,7 +14,7 @@
     </CompilerOptions>
     <Description Value="Lazarus IDE editorConfig support"/>
     <License Value="MIT"/>
-    <Version Minor="8"/>
+    <Version Minor="8" Release="1"/>
     <Files Count="1">
       <Item1>
         <Filename Value="editorconfigreg.pas"/>

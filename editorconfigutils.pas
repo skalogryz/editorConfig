@@ -29,7 +29,9 @@ function FindMatching(const SrchFileName: string; cfg: TEditorConfigFile; Ignore
 
 procedure InitLookupResult(out lk: TLookupResult);
 
-function GetTabWidth(ec: TEditorConfigEntry; const defVal: integer = -1): integer;
+function GetTabWidth(tab_width, indent_size: integer; const defVal: integer = -1): integer; overload;
+function GetTabWidth(ec: TEditorConfigEntry; const defVal: integer = -1): integer; overload;
+function GetTabWidth(const ec: TLookUpResult; const defVal: integer = -1): integer; overload;
 function isTabIndent(const indent_style: string): Boolean;
 function isSpaceIndent(const indent_style: string): Boolean;
 
@@ -91,12 +93,22 @@ begin
   end;
 end;
 
+function GetTabWidth(tab_width, indent_size: integer; const defVal: integer = -1): integer;
+begin
+  if tab_width>=0 then Result := tab_width
+  else if indent_size>=0 then Result := indent_size
+  else Result := defVal;
+end;
+
 function GetTabWidth(ec: TEditorConfigEntry; const defVal: integer = -1): integer;
 begin
   if not Assigned(ec) then Result := defVal
-  else if ec.tab_width>=0 then Result := ec.tab_width
-  else if ec.indent_size>=0 then Result := ec.indent_size
-  else Result :=defVal;
+  else Result := GetTabWidth(ec.tab_width, ec.indent_size, defVal);
+end;
+
+function GetTabWidth(const ec: TLookUpResult; const defVal: integer = -1): integer;
+begin
+  Result := GetTabWidth(ec.tab_width, ec.indent_size, defVal);
 end;
 
 function isTabIndent(const indent_style: string): Boolean;
