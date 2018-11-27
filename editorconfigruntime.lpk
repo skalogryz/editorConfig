@@ -8,7 +8,7 @@
       <Version Value="11"/>
       <PathDelim Value="\"/>
       <SearchPaths>
-        <UnitOutputDirectory Value="lib\$(TargetCPU)-$(TargetOS)\"/>
+        <UnitOutputDirectory Value="lib\$(TargetCPU)-$(TargetOS)"/>
       </SearchPaths>
       <Parsing>
         <SyntaxOptions>
@@ -24,24 +24,16 @@
     <Description Value="editorConfig (core?) run-time files.
 The files are gathered together into a package for the ease of use in Lazarus IDE.
 (doesnt' have to be in the package)"/>
-    <Version Minor="9"/>
-    <Files Count="4">
+    <Version Minor="9" Release="1"/>
+    <Files Count="2">
       <Item1>
-        <Filename Value="edconfglob.pas"/>
-        <UnitName Value="edConfGlob"/>
-      </Item1>
-      <Item2>
-        <Filename Value="edconfiniutils.pas"/>
-        <UnitName Value="EdConfIniUtils"/>
-      </Item2>
-      <Item3>
         <Filename Value="editorconfigtypes.pas"/>
         <UnitName Value="EditorConfigTypes"/>
-      </Item3>
-      <Item4>
+      </Item1>
+      <Item2>
         <Filename Value="editorconfigutils.pas"/>
-        <UnitName Value="editorConfigUtils"/>
-      </Item4>
+        <UnitName Value="EditorConfigUtils"/>
+      </Item2>
     </Files>
     <RequiredPkgs Count="1">
       <Item1>
@@ -54,5 +46,8 @@ The files are gathered together into a package for the ease of use in Lazarus ID
     <PublishOptions>
       <Version Value="2"/>
     </PublishOptions>
+    <CustomOptions Items="ExternHelp" Version="2">
+      <_ExternHelp Items="Count"/>
+    </CustomOptions>
   </Package>
 </CONFIG>

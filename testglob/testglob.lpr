@@ -3,10 +3,7 @@ program testglob;
 {$mode objfpc}{$H+}
 
 uses
-  {$IFDEF UNIX}{$IFDEF UseCThreads}
-  cthreads,
-  {$ENDIF}{$ENDIF}
-  Classes, SysUtils, edConfGlob, fnmatch;
+  Classes, SysUtils, EditorConfigTypes, EditorConfigUtils;
 
 var
   pat : string;

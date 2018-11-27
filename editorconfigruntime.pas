@@ -8,7 +8,7 @@ unit editorconfigruntime;
 interface
 
 uses
-  edConfGlob, EdConfIniUtils, EditorConfigTypes, editorConfigUtils;
+  EditorConfigTypes, EditorConfigUtils;
 
 implementation
 
