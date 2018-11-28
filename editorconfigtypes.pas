@@ -4,12 +4,22 @@ unit EditorConfigTypes;
 
 interface
 
+const
+  EditorConfig_Ver_Major   = 1;
+  EditorConfig_Ver_Minor   = 0;
+  EditorConfig_Ver_Release = 0;
+  EditorConfig_Ver_Suffix  = '';
+
 type
   TTriBool = (
     tbUnset, // unspecified (an editor default sould be used)
     tbFalse, // false (specified)
     tbTrue   // true (specified)
   );
+
+  TEditorConfigKeyVal = record
+    key, value: string;
+  end;
 
   { TEditorConfigEntry }
 
@@ -24,7 +34,11 @@ type
     charset      : string;  //set to latin1, utf-8, utf-8-bom, utf-16be or utf-16le to control the character set.
     trim_trailing_whitespace : TTriBool; //set to true to remove any whitespace characters preceding newline characters and false to ensure it doesn't.
     insert_final_newline     : TTriBool; //set to true to ensure file ends with a newline when saving and false to ensure it doesn't.
+
+    keyval  : array of TEditorConfigKeyVal;
+    keyvalCount : integer;
     constructor Create(const aname: string);
+    function AddKeyVal(const aname, avalue: string; force: Boolean = false): Boolean;
     property name: string read fname;
   end;
 
@@ -96,6 +110,58 @@ begin
   tab_width := -1; // negtive = not set
 end;
 
+function TEditorConfigEntry.AddKeyVal(const aname, avalue: string; force: Boolean): Boolean;
+var
+  i : integer;
+  ei : integer;
+begin
+  ei:=-1;
+  for i:=0 to keyvalCount-1 do
+    if keyval[i].key = aname then begin
+      ei:=i;
+      Break;
+    end;
+
+  if (ei>=0) and not force then begin
+    Result := false;
+    Exit;
+  end;
+  Result := true;
+
+  if aname='indent_style' then
+    // set to tab or space to use hard tabs or soft tabs respectively.
+    indent_style := avalue
+  else if aname='indent_size' then
+    // a whole number defining the number of columns used for each indentation level and the width of soft tabs (when supported). When set to tab, the value of tab_width (if specified) will be used.
+    TryStrToInt( avalue, indent_size )
+  else if aname = 'tab_width' then
+    // a whole number defining the number of columns used to represent a tab character. This defaults to the value of indent_size and doesn't usually need to be specified.
+    TryStrToInt( avalue, tab_width )
+  else if aname = 'end_of_line' then
+    // set to lf, cr, or crlf to control how line breaks are represented.
+    end_of_line := avalue
+  else if aname = 'charset' then
+    // set to latin1, utf-8, utf-8-bom, utf-16be or utf-16le to control the character set.
+    charset := avalue
+  else if aname = 'trim_trailing_whitespace' then
+    // set to true to remove any whitespace characters preceding newline characters and false to ensure it doesn't.
+    TryStrToTriBool(avalue,  trim_trailing_whitespace )
+  else if aname = 'insert_final_newline' then
+    // set to true to ensure file ends with a newline when saving and false to ensure it doesn't.
+    TryStrToTriBool(avalue, insert_final_newline);
+
+  if ei < 0 then begin
+    if keyvalCount = length(keyval) then begin
+      if keyvalCount =0 then setLength(keyval, 8)
+      else SetLength(keyval, keyvalCount*2);
+    end;
+    keyval[keyvalCount].key := aname;
+    keyval[keyvalCount].value := avalue;
+    inc(keyvalCount);
+  end else
+    keyval[ei].value := avalue;
+end;
+
 { TEditorConfigFile }
 
 function TEditorConfigFile.GetCount: Integer;
@@ -148,6 +214,62 @@ begin
     end else
       inc(pidx)
   end;
+  inc(pidx);
+  if Result then inc(sidx);
+end;
+
+function isSetPattern(const p: string; i: integer): Boolean;
+begin
+  Result := (i<=length(p)) and (p[i]='[');
+  if Result then begin
+    inc(i);
+    while (i<=length(p)) and (p[i]<>']') do begin
+      if (p[i]='/') then break
+      else if (p[i]='\') then inc(i); // skip over the next character
+      inc(i);
+    end;
+    Result := (i<=length(p)) and (p[i]=']');
+  end;
+end;
+
+function _ParseSetEscape(const p: string; var pidx: integer; const s: string; var sidx: integer): Boolean;
+var
+  ch : char;
+  isneg : Boolean;
+const
+  PATH_SEPARATOR = '/';
+begin
+  if (p[pidx]='[') then inc(pidx);
+  ch := s[sidx];
+  Result := false;
+
+  if (ch = PATH_SEPARATOR) then
+    // [] are hanlded in editorConfig (similar to gitignore)
+    // as fnmatch() function with FNM_PATHNAME set.
+    // That means that '/' character cannot match to any wildcard (? or * or [])
+
+    // todo: this should be options
+    Exit;
+
+  isneg := (pidx<=length(p)) and (p[pidx]='!');
+  if isneg then inc(pidx);
+
+  while (pidx<=length(p)) and (p[pidx]<>']') do begin
+    if not Result then begin
+      if ((pidx<length(p)) and( p[pidx+1]='-')) then begin
+        Result := (ch >= p[pidx]) and (ch <= p[pidx+2]);
+        inc(pidx,3);
+      end else begin
+        if p[pidx] = '\' then inc(pidx);
+        Result := p[pidx]=ch;
+        inc(pidx);
+      end;
+    end else
+      inc(pidx)
+  end;
+
+  if isneg then Result := not Result;
+
   inc(pidx);
   if Result then inc(sidx);
 end;
@@ -245,7 +367,18 @@ begin
         inc(pi);
         inc(i);
       end;
-      '[': Result := _ParseSet(p, pi, s, i);
+      '[': begin
+          if isSetPattern(p, pi) then
+            Result := _ParseSetEscape(p, pi, s, i)
+          else begin
+            Result := s[i] = p[pi];
+            if Result then begin
+              inc(pi);
+              inc(i);
+            end;
+          end;
+        end;
+
       '{': Result := ctx.GetSet(p, pi).Match(s,i);
       '*': begin
         inc(pi);
@@ -293,6 +426,10 @@ function ECMatch(const pat, s: string): Boolean;
 var
   ctx: TECContext;
 begin
+  if (pat = '*') then begin // special case :(
+    result:=s<>'';
+    exit;
+  end;
   ctx:=TECContext.Create;
   try
     Result := _ECMatch(ctx, pat, 1, s, 1);

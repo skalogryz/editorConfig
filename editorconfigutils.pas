@@ -21,11 +21,13 @@ type
     insert_final_newline     : TTriBool; //
   end;
 
+function LookupEditorConfig(const FileName: RawByteString; out res: TEditorConfigEntry; IgnoreCase: Boolean = true): Boolean; overload;
 function LookupEditorConfig(const FileName: RawByteString; out res: TLookUpResult; IgnoreCase: Boolean = true): Boolean; overload;
 function LookupEditorConfig(const FileName: UnicodeString; out res: TLookUpResult; IgnoreCase: Boolean = true): Boolean; overload;
 function LookupEditorConfig(const FileName: WideString; out res: TLookUpResult; IgnoreCase: Boolean = true): Boolean; overload;
 
-function FindMatching(const SrchFileName: string; cfg: TEditorConfigFile; IgnoreCase: Boolean): TEditorConfigEntry;
+procedure FindMatching(const SrchFileName: string; cfg: TEditorConfigFile; IgnoreCase: Boolean; matches: TList); overload;
+function FindMatching(const SrchFileName: string; cfg: TEditorConfigFile; IgnoreCase: Boolean; dst: TEditorConfigEntry): Integer; overload;
 
 procedure InitLookupResult(out lk: TLookupResult);
 
@@ -136,29 +138,8 @@ end;
 function LowKVToEditConfig(const lowkey, value: string; dst: TEditorConfigEntry): Boolean;
 begin
   Result := true;
-  if lowkey='indent_style' then
-    // set to tab or space to use hard tabs or soft tabs respectively.
-    dst.indent_style := value
-  else if lowkey='indent_size' then
-    // a whole number defining the number of columns used for each indentation level and the width of soft tabs (when supported). When set to tab, the value of tab_width (if specified) will be used.
-    Result := TryStrToInt( value, dst.indent_size )
-  else if lowkey = 'tab_width' then
-    // a whole number defining the number of columns used to represent a tab character. This defaults to the value of indent_size and doesn't usually need to be specified.
-    Result := TryStrToInt( value, dst.tab_width )
-  else if lowkey = 'end_of_line' then
-    // set to lf, cr, or crlf to control how line breaks are represented.
-    dst.end_of_line := value
-  else if lowkey = 'end_of_line' then
-    // set to latin1, utf-8, utf-8-bom, utf-16be or utf-16le to control the character set.
-    dst.charset := dst.charset
-  else if lowkey = 'trim_trailing_whitespace' then
-    // set to true to remove any whitespace characters preceding newline characters and false to ensure it doesn't.
-    Result := TryStrToTriBool(value,  dst.trim_trailing_whitespace )
-  else if lowkey = 'insert_final_newline' then
-    // set to true to ensure file ends with a newline when saving and false to ensure it doesn't.
-    Result := TryStrToTriBool(value, dst.insert_final_newline)
-  else
-    Result := false;
+  dst.AddKeyVal(lowkey, value);
+  Result := true;
 end;
 
 function KVToEditConfig(const key,value: string; dst: TEditorConfigEntry): Boolean;
@@ -219,27 +200,49 @@ begin
   end;
 end;
 
-function FindMatching(const SrchFileName: string; cfg: TEditorConfigFile; IgnoreCase: Boolean): TEditorConfigEntry;
+procedure FindMatching(const SrchFileName: string; cfg: TEditorConfigFile; IgnoreCase: Boolean; matches: TList);
 var
-  cmp : string;
-  i   : integer;
+  cmp   : string;
+  i     : integer;
   match : Boolean;
+  ent   : TEditorConfigEntry;
 begin
-  Result := nil;
   if not Assigned(cfg) or (SrchFileName = '') then Exit;
 
   if IgnoreCase then cmp := LowerCase(SrchFileName) // todo: this is UTF8 file name, so the proper UTF8 lower case should be used
   else cmp := SrchFileName;
 
   for i:=0 to cfg.Count-1 do begin
-    Result := cfg[i];
+    ent := cfg[i];
     if IgnoreCase then
-      match := ECMatch( LowerCase(Result.name), cmp)
+      match := ECMatch(LowerCase(ent.name), cmp)
     else
-      match := ECMatch(Result.name, cmp);
-    if match then Exit;
+      match := ECMatch(ent.name, cmp);
+    if match then matches.Add(ent);
   end;
-  Result := nil;
+end;
+
+function FindMatching(const SrchFileName: string; cfg: TEditorConfigFile; IgnoreCase: Boolean; dst: TEditorConfigEntry): Integer;
+var
+  m : TList;
+  i : integer;
+  j : integer;
+  e : TEditorConfigEntry;
+begin
+  m := TList.Create;
+  try
+    Result := 0;
+    FindMatching(SrchFileName, cfg, IgnoreCase, m);
+    inc(Result, m.Count);
+    for i:=0 to m.Count-1 do begin
+      e := TEditorConfigEntry(m[i]);
+      for j:=0 to e.keyvalCount-1 do
+        dst.AddKeyVal(e.keyval[j].key,e.keyval[j].value);
+    end;
+
+  finally
+    m.Free;
+  end;
 end;
 
 procedure CopyEntry(src: TEditorConfigEntry; var dst : TLookupResult);
@@ -260,7 +263,7 @@ begin
   FillChar(lk, sizeof(lk), 0);
 end;
 
-function LookupEditorConfig(const FileName: RawByteString; out res: TLookUpResult; IgnoreCase: Boolean): Boolean;
+function LookupEditorConfig(const FileName: RawByteString; out res: TEditorConfigEntry; IgnoreCase: Boolean = true): Boolean; overload;
 var
   pp   : string;
   pth  : string;
@@ -270,12 +273,13 @@ var
   ent  : TEditorConfigEntry;
   srch : string;
   fulln: string;
+  i : integer;
 begin
   fulln := ExpandFileName(FileName);
   Result := false;
   pth := ExtractFilePath(fulln);
   done := false;
-  InitLookupResult(res);
+  res := nil;
 
   while not done do begin
     cfg := pth+'.editorconfig';
@@ -285,13 +289,17 @@ begin
         ReadFromFile(ec, cfg, true);
         srch := fulln;
         Delete(srch, 1, length(pth));
-        ent := FindMatching(srch, ec, IgnoreCase);
+
+        if not Assigned(reS) then res := TEditorConfigEntry.Create('');
+
+        FindMatching(srch, ec, IgnoreCase, res);
 
         Result := Assigned(ent);
         if Result then begin
-          CopyEntry(ent, res);
-          res.editorConfigFile := cfg;
-          Done := true;
+          res := TEditorConfigEntry.Create(ent.name);
+          for i:=0 to ent.keyvalCount-1 do
+            res.AddKeyVal( ent.keyval[i].key, ent.keyval[i].value );
+          //Done := true;
         end;
 
         Done := Done or ec.root; // it's root no need to search any further
@@ -310,6 +318,26 @@ begin
         done := pp = pth;
       end;
     end;
+  end;
+end;
+
+function LookupEditorConfig(const FileName: RawByteString; out res: TLookUpResult; IgnoreCase: Boolean): Boolean;
+var
+  pp   : string;
+  pth  : string;
+  done : Boolean;
+  cfg  : string;
+  ec   : TEditorConfigFile;
+  ent  : TEditorConfigEntry;
+  srch : string;
+  fulln: string;
+begin
+  LookupEditorConfig(FileName, ent, IgnoreCase);
+  Result := Assigned(ent);
+  InitLookupResult(res);
+  if Result then begin
+    CopyEntry(ent, res);
+    ent.Free;
   end;
 end;
 
