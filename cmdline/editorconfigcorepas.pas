@@ -16,7 +16,9 @@ type
   public
     ConfigFile : String;
     lastFound  : TEditorConfigEntry;
-    procedure SetVersion(amaj, amin, apatch: integer);
+    targetVer  : TEditorConfigVersion;
+    constructor Create;
+    procedure SetVersion(const aversion: string);
     function Parse(const fullname: string): integer;
   end;
 
@@ -76,13 +78,25 @@ procedure editorconfig_handle_get_name_value(h: TEditorConfigHandle;
 
 function editorconfig_get_error_msg(err_num: integer): string;
 
+procedure editorconfig_handle_set_conf_file_name(h: TEditorConfigHandle;
+  const config_file: string);
+
+procedure editorconfig_handle_set_version(h: TEditorConfigHandle;
+  const aversion: string);
+
 implementation
 
 { TEditorConfigHandle }
 
-procedure TEditorConfigHandle.SetVersion(amaj, amin, apatch: integer);
+constructor TEditorConfigHandle.Create;
 begin
+  inherited Create;
+  targetVer := DefaultVersion;
+end;
 
+procedure TEditorConfigHandle.SetVersion(const aversion: string);
+begin
+  StrToVersion(aversion, targetVer);
 end;
 
 function TEditorConfigHandle.Parse(const fullname: string): integer;
@@ -121,6 +135,9 @@ begin
       lastfound := nil;
     end;
   end;
+
+  if Assigned(lastFound) then
+    SetDefaultProps(lastFound, targetVer);
 end;
 
 function editorconfig_parse(const full_filename: string; h: TEditorConfigHandle): Integer;
@@ -171,6 +188,17 @@ begin
   end;
 end;
 
+procedure editorconfig_handle_set_conf_file_name(h: TEditorConfigHandle;
+  const config_file: string);
+begin
+  if Assigned(h) then h.ConfigFile := config_file;
+end;
+
+procedure editorconfig_handle_set_version(h: TEditorConfigHandle;
+  const aversion: string);
+begin
+  if Assigned(h) then h.SetVersion(aversion);
+end;
 
 end.
 

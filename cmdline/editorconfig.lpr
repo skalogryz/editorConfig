@@ -7,7 +7,7 @@ program editorconfig;
 uses
   SysUtils, Classes, EditorConfigTypes, EditorConfigUtils, editorconfigcorepas;
 
-procedure Run(file_paths: TStrings; const conf_filename: string);
+procedure Run(file_paths: TStrings; const conf_filename, aversion: string);
 var
   i : integer;
   j : integer;
@@ -65,11 +65,11 @@ begin
 
       // Set conf file name
       if (conf_filename<>'') then
-        eh.ConfigFile := conf_filename; // editorconfig_handle_set_conf_file_name(eh, conf_filename);
+        editorconfig_handle_set_conf_file_name(eh, conf_filename);
 
       // Set the version to be compatible with */
-      //editorconfig_handle_set_version(eh,
-      //        version_major, version_minor, version_patch);
+      if aversion<>'' then
+        editorconfig_handle_set_version(eh, aversion);
 
       ///* parsing the editorconfig files */
       err_num := editorconfig_parse(full_filename, eh);
@@ -160,9 +160,9 @@ begin
   end;
 end;
 
-var
-  i : integer;
-  f : text;
+//var
+  //i : integer;
+  //f : text;
 begin
 {  AssignFile(f, 'C:\FPC_Laz\editorconfig\cmdline\editorconfig.txt');
   if not fileexists('C:\FPC_Laz\editorconfig\cmdline\editorconfig.txt')
@@ -184,7 +184,7 @@ begin
         PrintHelp;
         Exit;
       end;
-      Run(gFiles, gConfigFile);
+      Run(gFiles, gConfigFile, gReqVersion);
     finally
       gFiles.Free;
     end;

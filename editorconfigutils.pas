@@ -54,24 +54,49 @@ type
   TAnsiCharSet = set of char;
 
   TIniSettings = record
-    Comment: TAnsiCharSet;
+    Comment   : TAnsiCharSet;
+    KeyValSep : TAnsiCharSet;
+    MaxKeyLen : Integer; // <= 0 for unlimited
+    MaxValLen : Integer; // <= 0 for unlimited
+    MaxHdrLen : Integer; // <= 0 for unlimited
   end;
 
 function ParseIniLine(const iniline: string; const cfg: TIniSettings; out line: TIniLine): Boolean;
-procedure IniSetting(out ini: TIniSettings; const AComment: TAnsiCharSet);
+
+const
+  EditorConfig_KeyVal  = ['=',':'];
+  EditorConfig_Comment = [';','#'];
+  EditorConfig_MaxKeyLen = 50;
+  EditorConfig_MaxValLen = 255;
+  EditorConfig_MaxHdrLen = 4096;
+
+procedure IniSetting(out ini: TIniSettings;
+  const AKeyValSep: TAnsiCharSet = EditorConfig_KeyVal;
+  const AComment: TAnsiCharSet = EditorConfig_Comment;
+  AMaxKeyLen : Integer = EditorConfig_MaxKeyLen;
+  AMaxValLen : Integer = EditorConfig_MaxValLen;
+  AMaxHdrLen : Integer = EditorConfig_MaxHdrLen
+  );
+
 
 implementation
 
-procedure IniSetting(out ini: TIniSettings; const AComment: TAnsiCharSet);
+procedure IniSetting(out ini: TIniSettings;
+  const AKeyValSep, AComment: TAnsiCharSet;
+  AMaxKeyLen, AMaxValLen, AMaxHdrLen : Integer);
 begin
+  ini.KeyValSep := AKeyValSep;
   ini.Comment := AComment;
+  ini.MaxKeyLen := AMaxKeyLen;
+  ini.MaxValLen := AMaxValLen;
+  ini.MaxHdrLen := AMaxHdrLen;
 end;
 
 function ParseIniLine(const iniline: string; const cfg: TIniSettings; out line: TIniLine): Boolean;
 var
   s  : string;
-  ln : integer;
   i  : integer;
+  j  : integer;
 begin
   line.key:='';
   line.value:='';
@@ -82,16 +107,43 @@ begin
   if (s[1] in cfg.Comment) then begin
     line.ltype:=iltComment;
   end else if (s[1] = '[') then begin
-    ln:=length(s)-1;
-    if (s[length(s)]=']') then dec(ln);
-    line.value:=Copy(s, 2, ln);
-    line.ltype:=iltHeader;
+    //i:=length(s);
+    i:=2;
+    j:=0;
+    while (i<=length(s)) do begin
+      if s[i] = ']' then j:=i
+      else if s[i] = '\' then inc(i)
+      else if s[i] in cfg.Comment then break;
+      inc(i);
+    end;
+    if (j>0) and ((cfg.MaxHdrLen<=0) or (j-2<=cfg.MaxHdrLen)) then begin
+      line.value:=Copy(s, 2, j-2);
+      line.ltype:=iltHeader;
+    end else
+      line.ltype:=iltOther; // broken header
   end else begin
-    i := Pos('=', s);
-    if i<=0 then Exit;
-    line.value:=Trim(Copy(s, i+1, length(s)));
+    i:=1;
+    while (i<=length(s)) and not (s[i] in cfg.KeyValSep ) do
+      inc(i);
+    if (i>length(s))
+      or ((cfg.MaxKeyLen>0) and (i>cfg.MaxKeyLen+1))
+      then Exit;
+
     line.key:=Trim(Copy(s, 1, i-1));
+    line.value:=Trim(Copy(s, i+1, length(s)));
+    if (cfg.MaxValLen>0) and (length(line.value)>cfg.MaxValLen) then
+      Exit; //
+
     line.ltype:=iltKeyValue;
+    i:=1;
+    while (i<=length(line.value)) do begin
+      if (line.value[i]='\') then inc(i)
+      else if (line.value[i] in cfg.Comment) then begin
+        line.value := Copy(line.value, 1, i-1);
+        Break;
+      end;
+      inc(i);
+    end;
   end;
 end;
 
@@ -156,7 +208,7 @@ var
   ln  : TIniLine;
 begin
   ent := nil;
-  IniSetting(cfg, [';','#']);
+  IniSetting(cfg);
   for i:=0 to str.Count-1 do begin
     kv := trim(str[i]);
     if not ParseIniLine(kv, cfg, ln) then Continue;
