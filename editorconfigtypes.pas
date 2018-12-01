@@ -548,7 +548,6 @@ begin
       AddWord(j, pidx-j);
       j:=pidx+1;
       knownum := true; // this is a list of words, and not numbers range
-      inc(pidx);
 
     end else if (p[pidx]='.') and not knownum and (pidx<length(p)) and (p[pidx+1]='.') then begin
       isRange:=true;
@@ -564,16 +563,19 @@ begin
           max:=n2;
           if p[pidx] = '}' then break;
         end;
+      end else begin
+        break; // invalid  (even though, according to bash {a..z} is ok
       end;
+
       if not isNum then inc(pidx);
 
     end else if (p[pidx]='\') then
       inc(pidx);
-
     inc(pidx);
   end;
 
-  if not isNum then AddWord(j, pidx-j);
+  if not isRange then
+    AddWord(j, pidx-j);
   Result := (pidx <= length(p)) and (p[pidx]='}');
 
   inc(pidx);
@@ -595,6 +597,28 @@ begin
   end;
 end;
 
+function EscapePatMatch(const str, pat: string; var strOfs: Integer; patOfs: Integer; patLen: integer): Boolean;
+var
+  i,j : integer;
+begin
+  i:=strOfs;
+  j:=patOfs;
+  Result := false;
+  while (patLen>0) and (i<=length(str)) and (j <= length(pat)) do begin
+    if (pat[j]='\') then begin
+      dec(patLen);
+      inc(j);
+    end;
+    if (pat[j]<>str[i]) then Exit;
+    inc(i);
+    inc(j);
+    dec(patLen);
+  end;
+  Result := patLen = 0;
+  if Result then strOfs := i;
+end;
+
+
 function TBraceSet.Match(const s: string; var sidx: Integer; CheckEmpty: Boolean): Boolean;
 var
   i,j : integer;
@@ -610,19 +634,21 @@ begin
     if not CheckEmpty then begin
       for i:=0 to Count-1 do
         if (Strs[i].len<=leftlen) and (Strs[i].len>0) then begin
-          if CompareChar( s[sidx], Pattern[strs[i].offset], Strs[i].len)=0 then begin
+          //if CompareChar( s[sidx], Pattern[strs[i].offset], Strs[i].len)=0 then begin
+          if EscapePatMatch(s, Pattern, sidx, strs[i].offset, Strs[i].len) then begin
             Result := true;
-            inc(sidx, Strs[i].len);
+            //inc(sidx, Strs[i].len);
             Exit;
           end;
         end;
     end else begin
-      for i:=0 to Count-1 do
+      Result := false;
+      for i:=0 to Count-1 do begin
         if (Strs[i].len<=leftlen) and (Strs[i].len=0) then begin
           Result := true;
           Exit;
         end;
-      Result := false;
+      end;
     end
   end else begin
     Result := sidx<=length(s);

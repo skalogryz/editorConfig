@@ -281,7 +281,8 @@ begin
     pat := ent.name;
     if IgnoreCase then pat := LowerCase(pat);
 
-    match := ECMatch(pat, cmp) or ECMatch(pat, namecmp);
+    match := ECMatch(pat, cmp)
+      or ((namecmp <> cmp) and ECMatch(pat, namecmp));
     //writeln(pat,' ',cmp,' ',namecmp,' ',match);
 
     if match then matches.Add(ent);
