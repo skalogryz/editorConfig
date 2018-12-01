@@ -5,6 +5,7 @@ program editorconfig;
 {$mode delphi}{$H+}
 
 uses
+  Windows,
   SysUtils, Classes, EditorConfigTypes, EditorConfigUtils, editorconfigcorepas;
 
 procedure Run(file_paths: TStrings; const conf_filename, aversion: string);
@@ -160,19 +161,26 @@ begin
   end;
 end;
 
-//var
-  //i : integer;
-  //f : text;
+var
+  i : integer;
+  f : text;
+  ws : WideString;
 begin
 {  AssignFile(f, 'C:\FPC_Laz\editorconfig\cmdline\editorconfig.txt');
   if not fileexists('C:\FPC_Laz\editorconfig\cmdline\editorconfig.txt')
     then Rewrite(f)
     else Append(f);
+  writeln(f,GetCurrentDir);
+  write(f,ParamStr(0));
   for i:=1 to ParamCount do
-    writeln(f,ParamStr(i));
+    write(f,' ',ParamStr(i));
   writeln(f);
-  CloseFile(f);
- }
+  writeln(f, 'utf8:');
+  ws := PWideChar(GetCommandLineW);
+  writeln(f, UTF8Encode(ws));
+  writeln(f);
+  CloseFile(f);}
+
   try
     gFiles := TStringList.Create;
     try

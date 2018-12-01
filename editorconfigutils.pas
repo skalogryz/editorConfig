@@ -21,12 +21,14 @@ type
     insert_final_newline     : TTriBool; //
   end;
 
-function LookupEditorConfig(const FileName: RawByteString; out res: TEditorConfigEntry; IgnoreCase: Boolean = true): Boolean; overload;
+function LookupEditorConfig(const FileName: RawByteString; out res: TEditorConfigEntry;
+  IgnoreCase: Boolean = true; const editorConfigName: string = EditorConfig_Name): Boolean; overload;
 function LookupEditorConfig(const FileName: RawByteString; out res: TLookUpResult; IgnoreCase: Boolean = true): Boolean; overload;
 function LookupEditorConfig(const FileName: UnicodeString; out res: TLookUpResult; IgnoreCase: Boolean = true): Boolean; overload;
 function LookupEditorConfig(const FileName: WideString; out res: TLookUpResult; IgnoreCase: Boolean = true): Boolean; overload;
 
 procedure FindMatching(const SrchFileName: string; cfg: TEditorConfigFile; IgnoreCase: Boolean; matches: TList); overload;
+
 function FindMatching(const SrchFileName: string; cfg: TEditorConfigFile; IgnoreCase: Boolean; dst: TEditorConfigEntry): Integer; overload;
 
 procedure InitLookupResult(out lk: TLookupResult);
@@ -221,7 +223,10 @@ begin
         end else
           LowKVToEditConfig(ln.key, ln.value, ent);
       end;
-      iltHeader: ent := dst.AddEntry(ln.value);
+      iltHeader: begin
+        ln.value := NormalizePattern(ln.Value);
+        ent := dst.AddEntry( ln.value );
+      end;
     end;
   end;
 end;
@@ -252,24 +257,33 @@ begin
   end;
 end;
 
-procedure FindMatching(const SrchFileName: string; cfg: TEditorConfigFile; IgnoreCase: Boolean; matches: TList);
+procedure FindMatching(const SrchFileName: string;
+  cfg: TEditorConfigFile; IgnoreCase: Boolean; matches: TList);
 var
   cmp   : string;
+  namecmp : string;
   i     : integer;
   match : Boolean;
   ent   : TEditorConfigEntry;
+  pat   : string;
 begin
   if not Assigned(cfg) or (SrchFileName = '') then Exit;
 
   if IgnoreCase then cmp := LowerCase(SrchFileName) // todo: this is UTF8 file name, so the proper UTF8 lower case should be used
   else cmp := SrchFileName;
+  namecmp := ExtractFileName(cmp);
+
+  cmp := FileNameToCheckName(cmp);
 
   for i:=0 to cfg.Count-1 do begin
     ent := cfg[i];
-    if IgnoreCase then
-      match := ECMatch(LowerCase(ent.name), cmp)
-    else
-      match := ECMatch(ent.name, cmp);
+
+    pat := ent.name;
+    if IgnoreCase then pat := LowerCase(pat);
+
+    match := ECMatch(pat, cmp) or ECMatch(pat, namecmp);
+    //writeln(pat,' ',cmp,' ',namecmp,' ',match);
+
     if match then matches.Add(ent);
   end;
 end;
@@ -315,7 +329,10 @@ begin
   FillChar(lk, sizeof(lk), 0);
 end;
 
-function LookupEditorConfig(const FileName: RawByteString; out res: TEditorConfigEntry; IgnoreCase: Boolean = true): Boolean; overload;
+function LookupEditorConfig(const FileName: RawByteString;
+  out res: TEditorConfigEntry;
+  IgnoreCase: Boolean;
+  const editorConfigName: string): Boolean; overload;
 var
   pp   : string;
   pth  : string;
@@ -325,7 +342,8 @@ var
   ent  : TEditorConfigEntry;
   srch : string;
   fulln: string;
-  i : integer;
+  i    : integer;
+  m    : TList;
 begin
   fulln := ExpandFileName(FileName);
   Result := false;
@@ -334,28 +352,29 @@ begin
   res := nil;
 
   while not done do begin
-    cfg := pth+'.editorconfig';
+    cfg := pth+editorConfigName;
     if FileExists(cfg) then begin
       ec := TEditorConfigFile.Create;
+      ent := TEditorConfigEntry.Create('');
       try
         ReadFromFile(ec, cfg, true);
         srch := fulln;
         Delete(srch, 1, length(pth));
 
-        if not Assigned(reS) then res := TEditorConfigEntry.Create('');
+        if not Assigned(res) then res := TEditorConfigEntry.Create('');
 
-        FindMatching(srch, ec, IgnoreCase, res);
+        FindMatching(srch, ec, IgnoreCase, ent);
 
         Result := Assigned(ent);
         if Result then begin
-          res := TEditorConfigEntry.Create(ent.name);
+          //res := TEditorConfigEntry.Create(ent.name);
           for i:=0 to ent.keyvalCount-1 do
-            res.AddKeyVal( ent.keyval[i].key, ent.keyval[i].value );
-          //Done := true;
+            res.AddKeyVal( ent.keyval[i].key, ent.keyval[i].value, false);
         end;
 
         Done := Done or ec.root; // it's root no need to search any further
       finally
+        ent.Free;
         ec.Free;
       end;
     end;

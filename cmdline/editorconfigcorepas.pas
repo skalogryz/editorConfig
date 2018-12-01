@@ -34,6 +34,40 @@ const
   // editorconfig_handle is greater than the current version.
   EDITORCONFIG_PARSE_VERSION_TOO_NEW = -4;
 
+{*!
+ * @brief Parse editorconfig files corresponding to the file path given by
+ * full_filename, and related information is input and output in h.
+ *
+ * An example is available at
+ * <a href=https://github.com/editorconfig/editorconfig-core/blob/master/src/bin/main.c>src/bin/main.c</a>
+ * in EditorConfig C Core source code.
+ *
+ * @param full_filename The full path of a file that is edited by the editor
+ * for which the parsing result is.
+ *
+ * @param h The @ref editorconfig_handle to be used and returned from this
+ * function (including the parsing result). The @ref editorconfig_handle should
+ * be created by editorconfig_handle_init().
+ *
+ * @retval 0 Everything is OK.
+ *
+ * @retval "Positive Integer" A parsing error occurs. The return value would be
+ * the line number of parsing error. err_file obtained from h by calling
+ * editorconfig_handle_get_err_file() will also be filled with the file path
+ * that caused the parsing error.
+ *
+ * @retval "Negative Integer" Some error occured. See below for the reason of
+ * the error for each return value.
+ *
+ * @retval EDITORCONFIG_PARSE_NOT_FULL_PATH The full_filename is not a full
+ * path name.
+ *
+ * @retval EDITORCONFIG_PARSE_MEMORY_ERROR A memory error occurs.
+ *
+ * @retval EDITORCONFIG_PARSE_VERSION_TOO_NEW The required version specified in
+ * @ref editorconfig_handle is greater than the current version.
+ *
+ *}
 function editorconfig_parse(const full_filename: string; h: TEditorConfigHandle): Integer;
 
 {*!
@@ -76,11 +110,53 @@ function editorconfig_handle_get_name_value_count(h: TEditorConfigHandle): Integ
 procedure editorconfig_handle_get_name_value(h: TEditorConfigHandle;
  idx: integer; var name, value: string);
 
+{*!
+ * @brief Get the error message from the error number returned by
+ * editorconfig_parse().
+ *
+ * An example is available at
+ * <a href=https://github.com/editorconfig/editorconfig-core/blob/master/src/bin/main.c>src/bin/main.c</a>
+ * in EditorConfig C Core source code.
+ *
+ * @param err_num The error number that is used to obtain the error message.
+ *
+ * @return The error message corresponding to err_num.
+ *}
 function editorconfig_get_error_msg(err_num: integer): string;
 
+{*!
+ * @brief Set the conf_file_name field of an editorconfig_handle object.
+ *
+ * @param h The editorconfig_handle object whose conf_file_name field needs to
+ * be set.
+ *
+ * @param conf_file_name The new value of the conf_file_name field of the
+ * editorconfig_handle object.
+ *
+ * @return None.
+ *}
 procedure editorconfig_handle_set_conf_file_name(h: TEditorConfigHandle;
   const config_file: string);
 
+{*!
+ * @brief Set the version fields of an editorconfig_handle object.
+ *
+ * @param h The editorconfig_handle object whose version fields need to be set.
+ *
+ * @param major If not less than 0, the major version field will be set to
+ * major. If this parameter is less than 0, the major version field of the
+ * editorconfig_handle object will remain unchanged.
+ *
+ * @param minor If not less than 0, the minor version field will be set to
+ * minor. If this parameter is less than 0, the minor version field of the
+ * editorconfig_handle object will remain unchanged.
+ *
+ * @param patch If not less than 0, the patch version field will be set to
+ * patch. If this parameter is less than 0, the patch version field of the
+ * editorconfig_handle object will remain unchanged.
+ *
+ * @return None.
+ *}
 procedure editorconfig_handle_set_version(h: TEditorConfigHandle;
   const aversion: string);
 
@@ -100,10 +176,10 @@ begin
 end;
 
 function TEditorConfigHandle.Parse(const fullname: string): integer;
-var
-  ec  : TEditorConfigFile;
-  dir : string;
-  fn  : string;
+//var
+  //ec  : TEditorConfigFile;
+  //dir : string;
+  //fn  : string;
 begin
   Result := 0;
   if Assigned(lastFound) then lastFound.Free;
@@ -111,9 +187,8 @@ begin
 
   // making full-name relative
 
-
 //  function LookupEditorConfig(const FileName: WideString; out res: TLookUpResult; IgnoreCase: Boolean = true): Boolean; overload;
-  if ConfigFile<>'' then begin
+{  if ConfigFile<>'' then begin
     dir:=IncludeTrailingPathDelimiter(GetCurrentDir);
     fn :=Copy(fullname, length(dir)+1, length(fullname));
 
@@ -129,12 +204,12 @@ begin
     finally
       ec.Free;
     end;
-  end else begin
-    if not LookupEditorConfig( fullname, lastFound, false) then begin
+  end else begin}
+    if not LookupEditorConfig(fullname, lastFound, false, ConfigFile) then begin
       lastFound.Free;
       lastfound := nil;
     end;
-  end;
+  //end;
 
   if Assigned(lastFound) then
     SetDefaultProps(lastFound, targetVer);

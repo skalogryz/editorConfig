@@ -9,6 +9,7 @@ const
   EditorConfig_Ver_Minor   = 11;
   EditorConfig_Ver_Release = 0;
   EditorConfig_Ver_Suffix  = '';
+  EditorConfig_Name = '.editorconfig';
 
 type
   TTriBool = (
@@ -18,7 +19,8 @@ type
   );
 
   TEditorConfigKeyVal = record
-    key, value: string;
+    key   : string;
+    value : string;
   end;
 
   { TEditorConfigEntry }
@@ -26,7 +28,7 @@ type
   TEditorConfigEntry = class(TObject)
   private
     fname        : string;
-    procedure Unset(aindex: integer);
+    function _IndexOf(const aname: string): integer;
   public
     indent_style : string;  //set to tab or space to use hard tabs or soft tabs respectively.
     indent_size  : integer; //a whole number defining the number of columns used for each indentation level and the width of soft tabs (when supported). When set to tab, the value of tab_width (if specified) will be used.
@@ -39,7 +41,8 @@ type
     keyval  : array of TEditorConfigKeyVal;
     keyvalCount : integer;
     constructor Create(const aname: string);
-    function AddKeyVal(const aname, avalue: string): Boolean;
+    function AddKeyVal(const aname, avalue: string; overwriteValue: Boolean = true): Boolean;
+    function IndexOf(const aname: string): integer;
     property name: string read fname;
   end;
 
@@ -110,6 +113,9 @@ const
   prop_insert_final_newline     = 'insert_final_newline';
 
 function isLowCaseValue(const propname: string): Boolean;
+function FileNameToCheckName(const nm: string): string;
+// if the pattern starts with "/" it would be removed
+function NormalizePattern(const pat: string): string;
 
 implementation
 
@@ -144,15 +150,16 @@ end;
 
 { TEditorConfigEntry }
 
-procedure TEditorConfigEntry.Unset(aindex: integer);
+function TEditorConfigEntry._IndexOf(const aname: string): integer;
 var
-  c : integer;
+  i : integer;
 begin
-  if (aindex<0) or (aindex>=keyvalCount) then Exit;
-  c:=keyvalCount - aindex - 1; // 2 - 1 = 1
-  if c>0 then
-    Move(keyval[aindex], keyval[aindex-1], sizeof(TEditorConfigKeyVal) * c);
-  dec(keyvalCount);
+  Result := -1;
+  for i:=0 to keyvalCount-1 do
+    if keyval[i].key = aname then begin
+      Result:=i;
+      Exit;
+    end;
 end;
 
 constructor TEditorConfigEntry.Create(const aname: string);
@@ -163,31 +170,23 @@ begin
   tab_width := -1; // negtive = not set
 end;
 
-function TEditorConfigEntry.AddKeyVal(const aname, avalue: string): Boolean;
+function TEditorConfigEntry.AddKeyVal(const aname, avalue: string; overwriteValue: Boolean): Boolean;
 var
   i : integer;
   ei : integer;
   n, v: string;
-  isunset: Boolean;
 begin
   n:=lowercase(aname);
-  isunset := false;
   if isLowCaseValue(n) then begin
     v:=lowercase(avalue);
-    isunset := (v = 'unset');
   end else
     v:=avalue;
 
-  ei:=-1;
-  for i:=0 to keyvalCount-1 do
-    if keyval[i].key = n then begin
-      ei:=i;
-      Break;
-    end;
+  ei:=IndexOf(n);
 
-  if isunset then begin
-    if ei>=0 then Unset(ei);
-    Result := true;
+  // do not overwrite
+  if not overwriteValue and (ei>=0) then begin
+    Result := false;
     Exit;
   end;
 
@@ -224,8 +223,15 @@ begin
     keyval[keyvalCount].key := n;
     keyval[keyvalCount].value := v;
     inc(keyvalCount);
-  end else
+  end else begin
+    if keyval[ei].value = 'unset' then Exit;
     keyval[ei].value := v;
+  end;
+end;
+
+function TEditorConfigEntry.IndexOf(const aname: string): integer;
+begin
+  Result := _IndexOf( lowercase(aname));
 end;
 
 { TEditorConfigFile }
@@ -809,6 +815,24 @@ begin
     or (propname = prop_charset)
     or (propname = prop_trim_trailing_whitespace)
     or (propname = prop_insert_final_newline)
+end;
+
+function FileNameToCheckName(const nm: string): string;
+var
+  i : integer;
+begin
+  Result:=nm;
+  for i:=1 to length(Result) do begin
+    if Result[i] = '\' then Result[i] := '/';
+  end;
+end;
+
+function NormalizePattern(const pat: string): string;
+begin
+  if (pat<>'') and (pat[1]='/') then
+    Result := Copy(pat, 2, length(pat))
+  else
+    Result := pat;
 end;
 
 end.
