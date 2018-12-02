@@ -401,12 +401,12 @@ begin
   Result := _FileNameMatch(pat, 1, s, 1);
 end;
 
-function _ECMatch(const p: string; pidx: integer; const s: string; sidx: integer): Boolean;
+function _ECMatch(const p: string; var pidx: integer; const s: string; var sidx: integer): Boolean;
 var
   pi, i, j : integer;
   stoppath : Boolean;
   brres : TBracePatResult;
-  ii : integer;
+  ii, jj : integer;
 begin
   pi := pidx;
   i := sidx;
@@ -481,8 +481,13 @@ begin
               i:=j;
               break;
             end else begin
-              Result := _ECMatch(p, pi, s, j);
-              if Result then Exit;
+              jj := j;
+              Result := _ECMatch(p, pi, s, jj);
+              if Result then begin
+                pidx := pi;
+                sidx := jj;
+                Exit;
+              end;
             end;
       end;
     else
@@ -493,16 +498,23 @@ begin
         Result := false;
     end;
   end;
-  Result := Result and (i > length(s)) and (pi>length(p));
+  pidx := pi;
+  sidx := i;
 end;
 
 function ECMatch(const pat, s: string): Boolean;
+var
+  pi: integer;
+  i : integer;
 begin
   if (pat = '*') then begin // special case :(
     result:=s<>'';
     exit;
   end;
-  Result := _ECMatch(pat, 1, s, 1);
+  pi := 1;
+  i := 1;
+  Result := _ECMatch(pat, pi, s, i);
+  Result := Result and (i > length(s)) and (pi>length(pat));
 end;
 
 function UnixIntToStr(i: Int64; w: integer): string;
