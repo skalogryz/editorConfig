@@ -161,11 +161,43 @@ begin
   end;
 end;
 
+procedure RunBraceTest;
 var
   i : integer;
+  j : integer;
   f : text;
   ws : WideString;
+  p, s : string;
+  z : string;
 begin
+  if ParamCount>0 then p:=ParamStr(1) else p:='{a\,c,b}';
+  if ParamCount>1 then s:=ParamStr(2) else s:='a,c';
+
+  write('     ');
+  for i:=1 to length(p) do begin
+    z:=IntToStr(i);
+    write(z[length(z)]);
+  end;
+  writeln;
+  writeln('pat: ', p);
+
+  write('     ');
+  for i:=1 to length(s) do begin
+    z:=IntToStr(i);
+    write(z[length(z)]);
+  end;
+  writeln;
+  writeln('str: ', s);
+
+  i:=1;
+  j:=1;
+  writeln(BracePattern(p, i, s, j));
+  exit;
+end;
+
+begin
+  //RunBraceTest;
+  //Exit;
 {  AssignFile(f, 'C:\FPC_Laz\editorconfig\cmdline\editorconfig.txt');
   if not fileexists('C:\FPC_Laz\editorconfig\cmdline\editorconfig.txt')
     then Rewrite(f)
