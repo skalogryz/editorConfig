@@ -124,7 +124,29 @@ type
     bprSuccess
   );
 
-function BracePattern(const pat: string; var pidx: integer; const s: string; var sidx: integer): TBracePatResult;
+function BracePattern(const pat: string; var pidx: integer;  MajPatLen: integer; const s: string; var sidx: integer): TBracePatResult;
+
+type
+  TAnsiChars = set of AnsiChar;
+
+type
+  TBraceInfo = record
+    isRange    : Boolean;
+    rngIsNum   : Boolean;
+    rngWidth   : Integer;
+    rngCh1     : AnsiChar;
+    rngCh2     : AnsiChar;
+    rngInt1    : int64;
+    rngInt2    : Int64;
+
+    commaCount : integer;
+    nextIdx    : integer;
+    ofs        : array of integer;
+    ofsCount   : integer;
+  end;
+
+function BracePatternInfo(const pat: string; i: integer; out info: TBraceInfo): Boolean;
+procedure BraceInfoAddOfs(var bi: TBraceInfo; ofs: integer);
 
 implementation
 
@@ -401,28 +423,39 @@ begin
   Result := _FileNameMatch(pat, 1, s, 1);
 end;
 
-function _ECMatch(const p: string; var pidx: integer; const s: string; var sidx: integer): Boolean;
+function _ECMatch(const p: string; var pidx: integer; const s: string; var sidx: integer; { const stopChars: TAnsiChars = []}patlen: integer = -1): Boolean;
 var
   pi, i, j : integer;
   stoppath : Boolean;
   brres : TBracePatResult;
   ii, jj : integer;
+  maxpat: integer;
 begin
   pi := pidx;
   i := sidx;
   Result := true;
-  while Result and (pi <= length(p)) and (i<=length(s)) do begin
-    //writeln('idx=',pi,' ',p[pi]);
+
+  if patlen < 0 then maxpat := length(p)
+  else maxpat := pidx + patlen - 1;
+
+  while Result and (pi <= maxpat) and (i<=length(s)) do begin
     case p[pi] of
-      '\': inc(pi); // escaped character
+      '\': begin
+        inc(pi); // escaped character
+        if (pi<=length(p)) and (s[i] = p[pi]) then begin
+          inc(pi);
+          inc(i);
+        end else
+          Result := false;
+      end;
       '?': begin
         inc(pi);
         inc(i);
       end;
       '[': begin
-          if isSetPattern(p, pi) then
-            Result := _ParseSetEscape(p, pi, s, i)
-          else begin
+          if isSetPattern(p, pi) then begin
+            Result := _ParseSetEscape(p, pi, s, i);
+          end else begin
             Result := s[i] = p[pi];
             if Result then begin
               inc(pi);
@@ -433,16 +466,16 @@ begin
 
       '{': begin
           ii:=pi;
-          brres := BracePattern(p, pi, s, i);
-          //writeln('brres=',brres,' ',pi,'/',length(p),'; ',i,'/',length(s),' ',s);
+          brres := BracePattern(p, pi, patlen, s, i);
           if brres = bprErrorSyntax then begin
             pi:=ii;
             Result := s[i] = p[pi];
             inc(pi);
             inc(i);
-          end else
+          end else begin
             Result := (brres <> bprNoMatch);
-
+            Break;
+          end;
           {br := ctx.GetSet(p, pi);
           if Assigned(br) then begin
             Result := br.Match(s,i, false);
@@ -482,7 +515,7 @@ begin
               break;
             end else begin
               jj := j;
-              Result := _ECMatch(p, pi, s, jj);
+              Result := _ECMatch(p, pi, s, jj, maxpat-pi+1);
               if Result then begin
                 pidx := pi;
                 sidx := jj;
@@ -494,10 +527,12 @@ begin
       if s[i] = p[pi] then begin
         inc(pi);
         inc(i);
-      end else
+      end else begin
         Result := false;
+      end;
     end;
   end;
+
   pidx := pi;
   sidx := i;
 end;
@@ -529,27 +564,6 @@ begin
     end else
       Result := s+Result
   end;
-end;
-
-function EscapePatMatch(const str, pat: string; var strOfs: Integer; patOfs: Integer; patLen: integer): Boolean;
-var
-  i,j : integer;
-begin
-  i:=strOfs;
-  j:=patOfs;
-  Result := false;
-  while (patLen>0) and (i<=length(str)) and (j <= length(pat)) do begin
-    if (pat[j]='\') then begin
-      dec(patLen);
-      inc(j);
-    end;
-    if (pat[j]<>str[i]) then Exit;
-    inc(i);
-    inc(j);
-    dec(patLen);
-  end;
-  Result := patLen = 0;
-  if Result then strOfs := i;
 end;
 
 function isVersionGreaterThan(const ver: TEditorConfigVersion; amajor, aminor, arelease: integer): Boolean;
@@ -719,6 +733,7 @@ begin
   if (n[i]='0') then Result:=length(n);
 end;
 
+
 function BraceRange(const pat: string; var pidx: integer; const s: string; var sidx: integer;
   const afirst: string): TBracePatResult;
 var
@@ -821,113 +836,282 @@ begin
   end;
 end;
 
-function BracePattern(const pat: string; var pidx: integer; const s: string; var sidx: integer): TBracePatResult;
+function isBraceRange(const pat: string; var pidx: integer; const afirst: string; var info: TBraceInfo): Boolean;
 var
-  i,j,ii  : integer;
-  wofs    : integer;
-  wordcnt : integer; //
-  resp    : TBracePatResult;
-  res     : TBracePatResult;
-  first   : string;
-  isRange : Boolean;
-  resj    : Integer;
+  isnum : Boolean;
+  num1  : Int64;
+  num2  : Int64;
+  numw  : Integer;
+  //numw2 : Integer;
+  frst  : string;
+  i     : integer;
+  sc    : string;
+  //vl    : string;
+  //vlpat : string;
+  //vlnum : int64;
+  //err   : Integer;
+  //delta : Int64;
+  //ch1, ch2, chval : Char;
+
 begin
-  Result := bprNoMatch;
-  i:=pidx;
-  j:=sidx;
-  //writeln(' pidx=',pidx,'; j=',j);
-  if (i<=0) or (i>length(pat)) or (pat[i]<>'{') then begin
+  info.isRange := false;
+  if not BraceMinValue(afirst, isnum, num1, frst)  then begin
+    Result := false;
+    Exit;
+  end;
+
+  num2 := 0;
+  if isnum then begin
+    i:=pidx;
+    if (pidx<=length(pat)) and (pat[pidx]='-') then inc(pidx);
+    while (pat[pidx] in ['0'..'9']) do inc(pidx);
+    if not BraceMinValue(Copy(pat, i, pidx-i), isnum, num2, sc) then begin
+      Result := false;
+      Exit;
+    end;
+    if not isnum then begin
+      Result := false;
+      Exit;
+    end;
+  end else begin
+    if pat[pidx]='\' then begin
+      sc:=Copy(pat, pidx, 2);
+      inc(pidx, 2);
+      sc:=sc[2];
+    end else begin
+      sc := pat[pidx];
+      inc(pidx);
+    end;
+  end;
+
+  //todo: check range
+
+  Result := true;
+  info.isRange := true;
+  info.rngIsNum := isnum;
+  if isnum then begin
+    info.rngInt1:=num1;
+    info.rngInt2:=num2;
+
+    info.rngWidth:=NumWidth(frst);
+    numw:= NumWidth(sc);
+    if numw>info.rngWidth then info.rngWidth:=numw;
+
+  end else begin
+    info.rngCh1:=frst[1];
+    info.rngCh2:=sc[1];
+  end;
+
+  (*
+  delta := 0;
+
+  if pat[pidx]<>'}' then begin
     Result := bprErrorSyntax;
     Exit;
   end;
-  inc(i);
 
-  wofs:=i;
-  resj := j;
-  wordcnt := 0;
-  isRange := false;
-  while (i<=length(pat)) and (pat[i]<>'}') do begin
-    //writeln('i = ',i);
-    if (pat[i]='{') then begin
-      if (wofs < i) then begin
-        // there's a text prior to nested {} - must check
-        if EscapePatMatch(s, pat, j, wofs, i - wofs) then
-          resp := bprSuccess
-        else
-          resp := bprNoMatch;
-      end else
-        resp := bprSuccess;
-      //writeln(' BracePattern: i=',i,'; j=',j);
-      res := BracePattern(pat, i, s, j);
-      //writeln(' recurs resp = ',resp,' res=',res,' i=',i);
-      if res = bprErrorSyntax then begin
-        //inc(i);
-      end else if (res = bprSuccess) then begin
-        Result := res;
-        wofs:=i;
-      end;
-      //writeln(' after i=',i,'; j=',j);
-      //writeln(' need recursive ', Result);
-    end else if pat[i]='\' then begin
-      inc(i,2);
-    end else if pat[i]=',' then begin
-      //writeln('   ofs=',j);
-      if EscapePatMatch(s, pat, j, wofs, i - wofs) then begin
-        Result := bprSuccess;
-        resj := j;
-      end else
-        j := sidx;
-      inc(wordcnt);
-      wofs:=i+1;
-      inc(i);
-    end else if pat[i]='.' then begin
+  if isnum then begin
+    i:=sidx;
+    if (sidx<=length(s)) and (s[sidx]='-') then inc(sidx);
+    while (s[sidx] in ['0'..'9']) do inc(sidx);
 
-      if isDoubleDot(pat, i) then begin
-        ii := i;
-        first := Copy(pat, wofs, i-wofs);
-        //writeln('dot! wofs=',wofs,' ',i-wofs,' f=',first);
-        inc(i,2);
-        res := BraceRange(pat, i, s, j, first);
-        if res = bprErrorSyntax then
-          //i := ii+1 // revert to the previous position
-        else begin
-          isRange := true; // oh yes, it's range! so we mark it as many words
-          Result := res;
-        end;
-        //writeln('after BraceRange = ', res);
-      end else
-        inc(i);
-    end else
-      inc(i);
-  end;
-
-  //writeln('after loop = ',pat[i]);
-  if (i<=length(pat)) and (pat[i]='}') then begin
-    //writeln('  at result: ', Result,'; i=', i);
-
-    if not isRange and (Result<>bprSuccess) then begin
-      if (wordcnt>0) then begin
-        if EscapePatMatch(s, pat, j, wofs, i - wofs) then
-          Result := bprSuccess
-        else begin
-          Result := bprNoMatch;
-          j := sidx;
-        end;
-      end else
-        Result :=bprErrorSyntax;
-    end else if not isRange and (Result=bprSuccess) then begin
-      j:=resj;
+    vl := Copy(s, i, sidx-i);
+    Val(vl, vlnum, err);
+    if (err<>0) then begin
+      Result := bprErrorSyntax;
+      Exit;
     end;
 
-    inc(i);
-    if Result <> bprErrorSyntax then sidx := j;
-    pidx := i;
+    if not BraceNumInRange(vlnum, num1, num2, delta) then begin
+      Result := bprNoMatch;
+      Exit;
+    end;
+
+    numw1 := NumWidth(frst);
+    numw2 := NumWidth(sc);
+    if numw2>numw1 then numw1:=num2;
+
+    vlpat := UnixIntToStr(vlnum, numw1);
+    if vl=vlpat then
+      Result := bprSuccess
+    else
+      Result := bprNoMatch;
   end else begin
-    Result := bprErrorSyntax;
-    pidx := i;
+
+    chval := s[sidx];
+    ch1 := frst[1];
+    ch2 := sc[1];
+
+    if ch1<ch2 then begin
+      if (chval>=ch1) and (chval<=ch2) then
+        Result := bprSuccess
+      else
+        Result := bprNoMatch;
+    end else begin
+      if (chval>=ch2) and (chval<=ch1) then
+        Result := bprSuccess
+      else
+        Result := bprNoMatch;
+    end;
+  end;
+  *)
+end;
+
+
+function BraceRangeMarge(const s: string; var sidx: integer; const info: TBraceInfo): Boolean;
+var
+  i     : integer;
+  vl    : string;
+  err   : integer;
+  delta : integer;
+  vlnum : int64;
+  vlpat : string;
+  chval : AnsiChar;
+  ch1   : AnsiChar;
+  ch2   : AnsiChar;
+begin
+  delta:=0; //todo: this should come from info
+  Result := false;
+  if info.rngIsNum then begin
+    i:=sidx;
+    if (sidx<=length(s)) and (s[sidx]='-') then inc(sidx);
+    while (s[sidx] in ['0'..'9']) do inc(sidx);
+
+    vl := Copy(s, i, sidx-i);
+    Val(vl, vlnum, err);
+    if (err<>0) then Exit;
+
+    if not BraceNumInRange(vlnum, info.rngInt1, info.rngInt2, delta) then
+      Exit;
+    vlpat := UnixIntToStr(vlnum, info.rngWidth);
+    Result := vl=vlpat;
+  end else begin
+
+    chval := s[sidx];
+    ch1 := info.rngCh1;
+    ch2 := info.rngCh2;
+
+    if ch1<ch2 then
+      Result := (chval>=ch1) and (chval<=ch2)
+    else
+      Result := (chval>=ch2) and (chval<=ch1);
   end;
 end;
 
+function BracePatternInfo(const pat: string; i: integer; out info: TBraceInfo): Boolean;
+var
+  lvl : integer;
+  j   : integer;
+begin
+  FillChar(info, sizeof(info),0);
+
+  Result := pat[i] = '{';
+  if not Result then Exit;
+  inc(i);
+  j:=i;
+
+  //if i<length(pat)-2 and pat[i+1]='.' and pat[i+2]='.' and not in pat[i+3]
+
+  lvl:=0;
+  while (i<=length(pat)) do begin
+    case pat[i] of
+      '.': if (lvl=0) and (info.commaCount=0) and (i<length(pat)) and (pat[i+1]='.') then begin
+             inc(i,2);
+             if isBraceRange(pat, i, Copy(pat, j, i-j-2), info) then begin
+               Result := (i<=length(pat)) and (pat[i]='}');
+               if result then inc(i);
+               info.nextIdx:=i;
+               Exit;
+             end;
+           end;
+      ',': if (lvl=0) then begin
+             if info.commaCount=0 then BraceInfoAddOfs(info, j);
+             BraceInfoAddOfs(info, i+1);
+             inc(info.commaCount);
+           end;
+      '{': inc(lvl);
+      '}': begin
+        if lvl = 0 then begin
+          info.nextIdx:=i+1;
+          Result := info.commaCount>0;
+          Exit;
+        end else
+          dec(lvl);
+      end;
+      '\': inc(i);
+    end;
+    inc(i);
+  end;
+  Result := false;
+end;
+
+procedure BraceInfoAddOfs(var bi: TBraceInfo; ofs: integer);
+begin
+  if bi.ofsCount=length(bi.ofs) then begin
+    if bi.ofsCount = 0 then SetLength(bi.ofs, 4)
+    else setLength(bi.ofs, bi.ofsCount * 2);
+  end;
+  bi.ofs[bi.ofsCount]:=ofs;
+  inc(bi.ofsCount);
+end;
+
+function BracePattern(const pat: string; var pidx: integer; MajPatLen: integer; const s: string; var sidx: integer): TBracePatResult;
+var
+  i,j,wofs: integer;
+  si : integer;
+  bi : TBraceInfo;
+  rescheck : Boolean;
+  //len : integer;
+  patlen : integer;
+  initpidx: integer;
+begin
+  if not BracePatternInfo(pat, pidx, bi) then begin
+    Result := bprErrorSyntax;
+    Exit;
+  end;
+  initpidx:=pidx;
+  Result := bprNoMatch;
+  if bi.isRange then begin
+    if BraceRangeMarge(s, sidx, bi) then begin
+      pidx := bi.nextIdx;
+      if (pidx <= length(pat)) or (sidx<=length(s)) then begin
+        if _ECMatch(pat, pidx, s, sidx, MajPatLen - (pidx-initpidx+1)) then
+          Result := bprSuccess
+        else
+          Result := bprNoMatch;
+      end else
+        Result := bprSuccess;
+    end;
+  end else begin
+    inc(pidx);
+    wofs := pidx;
+    si := sidx;
+    rescheck := false;
+    for i:=0 to bi.ofsCount-1 do begin
+      pidx := wofs;
+      sidx := si;
+      j := bi.ofs[i];
+      if (pat[j]<>',') then begin
+        pidx := j;
+        if i<bi.ofsCount-1 then patlen := bi.ofs[i+1]-j-1
+        else patlen := bi.nextIdx-1-j;
+        rescheck := _ECMatch(pat, pidx, s, sidx, patlen);
+        rescheck := rescheck and (pidx = j+patlen);
+      end else
+        rescheck := true;
+
+      if rescheck then begin
+        pidx := bi.nextIdx;
+        if (pidx <= length(pat)) or (sidx<=length(s)) then begin
+          rescheck := _ECMatch(pat, pidx, s, sidx, MajPatLen - (pidx-initpidx+1));
+        end;
+      end;
+
+      if rescheck then break;
+    end;
+    if rescheck then Result := bprSuccess;
+  end;
+end;
 
 end.
 

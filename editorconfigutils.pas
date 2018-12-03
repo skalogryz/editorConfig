@@ -283,7 +283,6 @@ begin
 
     match := ECMatch(pat, cmp)
       or ((namecmp <> cmp) and ECMatch(pat, namecmp));
-    //writeln(pat,' ',cmp,' ',namecmp,' ',match);
 
     if match then matches.Add(ent);
   end;
