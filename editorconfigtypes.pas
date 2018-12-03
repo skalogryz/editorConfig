@@ -476,16 +476,6 @@ begin
             Result := (brres <> bprNoMatch);
             Break;
           end;
-          {br := ctx.GetSet(p, pi);
-          if Assigned(br) then begin
-            Result := br.Match(s,i, false);
-            if not Result then
-              Result := br.Match(s,i, true);
-          end else begin
-            Result := s[i] = p[pi];
-            inc(pi);
-            inc(i);
-          end;}
         end;
       '*': begin
         inc(pi);
@@ -507,7 +497,8 @@ begin
               end;
           end;
           i:=length(s)+1;
-        end else
+        end else begin
+          ii := pi;
           for j:=i to length(s) do
             if stoppath and (s[j]='/') then begin
               Result := true; // continue the loop
@@ -515,13 +506,24 @@ begin
               break;
             end else begin
               jj := j;
+              pi := ii;
               Result := _ECMatch(p, pi, s, jj, maxpat-pi+1);
               if Result then begin
                 pidx := pi;
                 sidx := jj;
                 Exit;
+              end else if not stoppath and (p[pi]='/') and (s[j-1]='/') then begin
+                // handle cases for [d/**/z.c] matching /glob/d/z.c
+                inc(pi);
+                Result := _ECMatch(p, pi, s, jj, maxpat-pi+1);
+                if Result then begin
+                  pidx := pi;
+                  sidx := jj;
+                  Exit;
+                end;
               end;
             end;
+        end;
       end;
     else
       if s[i] = p[pi] then begin
@@ -691,11 +693,6 @@ begin
     Result := pat;
 end;
 
-function isDoubleDot(const s: string; ofs: integer): Boolean;
-begin
-  Result := (ofs>0) and (ofs<length(s)) and (s[ofs]='.') and (s[ofs+1]='.');
-end;
-
 function BraceMinValue(const p: string; out isNumeric: Boolean;
   out Number: Int64; out str: string): Boolean;
 var
@@ -734,125 +731,15 @@ begin
 end;
 
 
-function BraceRange(const pat: string; var pidx: integer; const s: string; var sidx: integer;
-  const afirst: string): TBracePatResult;
-var
-  isnum : Boolean;
-  num1  : Int64;
-  num2  : Int64;
-  numw1 : Integer;
-  numw2 : Integer;
-  frst  : string;
-  i     : integer;
-  sc    : string;
-  vl    : string;
-  vlpat : string;
-  vlnum : int64;
-  err   : Integer;
-  delta : Int64;
-  ch1, ch2, chval : Char;
-
-begin
-  if not BraceMinValue(afirst, isnum, num1, frst)  then begin
-    Result := bprErrorSyntax;
-    Exit;
-  end;
-
-  num2 := 0;
-  if isnum then begin
-    i:=pidx;
-    if (pidx<=length(pat)) and (pat[pidx]='-') then inc(pidx);
-    while (pat[pidx] in ['0'..'9']) do inc(pidx);
-    if not BraceMinValue(Copy(pat, i, pidx-i), isnum, num2, sc) then begin
-      Result := bprErrorSyntax;
-      Exit;
-    end;
-    if not isnum then begin
-      Result := bprErrorSyntax;
-      Exit;
-    end;
-  end else begin
-    if pat[pidx]='\' then begin
-      sc:=Copy(pat, pidx, 2);
-      inc(pidx, 2);
-      sc:=sc[2];
-    end else begin
-      sc := pat[pidx];
-      inc(pidx);
-    end;
-  end;
-
-  //todo: check range
-  delta := 0;
-
-  if pat[pidx]<>'}' then begin
-    Result := bprErrorSyntax;
-    Exit;
-  end;
-
-  if isnum then begin
-    i:=sidx;
-    if (sidx<=length(s)) and (s[sidx]='-') then inc(sidx);
-    while (s[sidx] in ['0'..'9']) do inc(sidx);
-
-    vl := Copy(s, i, sidx-i);
-    Val(vl, vlnum, err);
-    if (err<>0) then begin
-      Result := bprErrorSyntax;
-      Exit;
-    end;
-
-    if not BraceNumInRange(vlnum, num1, num2, delta) then begin
-      Result := bprNoMatch;
-      Exit;
-    end;
-
-    numw1 := NumWidth(frst);
-    numw2 := NumWidth(sc);
-    if numw2>numw1 then numw1:=num2;
-
-    vlpat := UnixIntToStr(vlnum, numw1);
-    if vl=vlpat then
-      Result := bprSuccess
-    else
-      Result := bprNoMatch;
-  end else begin
-
-    chval := s[sidx];
-    ch1 := frst[1];
-    ch2 := sc[1];
-
-    if ch1<ch2 then begin
-      if (chval>=ch1) and (chval<=ch2) then
-        Result := bprSuccess
-      else
-        Result := bprNoMatch;
-    end else begin
-      if (chval>=ch2) and (chval<=ch1) then
-        Result := bprSuccess
-      else
-        Result := bprNoMatch;
-    end;
-  end;
-end;
-
 function isBraceRange(const pat: string; var pidx: integer; const afirst: string; var info: TBraceInfo): Boolean;
 var
   isnum : Boolean;
   num1  : Int64;
   num2  : Int64;
   numw  : Integer;
-  //numw2 : Integer;
   frst  : string;
   i     : integer;
   sc    : string;
-  //vl    : string;
-  //vlpat : string;
-  //vlnum : int64;
-  //err   : Integer;
-  //delta : Int64;
-  //ch1, ch2, chval : Char;
-
 begin
   info.isRange := false;
   if not BraceMinValue(afirst, isnum, num1, frst)  then begin
@@ -901,60 +788,6 @@ begin
     info.rngCh1:=frst[1];
     info.rngCh2:=sc[1];
   end;
-
-  (*
-  delta := 0;
-
-  if pat[pidx]<>'}' then begin
-    Result := bprErrorSyntax;
-    Exit;
-  end;
-
-  if isnum then begin
-    i:=sidx;
-    if (sidx<=length(s)) and (s[sidx]='-') then inc(sidx);
-    while (s[sidx] in ['0'..'9']) do inc(sidx);
-
-    vl := Copy(s, i, sidx-i);
-    Val(vl, vlnum, err);
-    if (err<>0) then begin
-      Result := bprErrorSyntax;
-      Exit;
-    end;
-
-    if not BraceNumInRange(vlnum, num1, num2, delta) then begin
-      Result := bprNoMatch;
-      Exit;
-    end;
-
-    numw1 := NumWidth(frst);
-    numw2 := NumWidth(sc);
-    if numw2>numw1 then numw1:=num2;
-
-    vlpat := UnixIntToStr(vlnum, numw1);
-    if vl=vlpat then
-      Result := bprSuccess
-    else
-      Result := bprNoMatch;
-  end else begin
-
-    chval := s[sidx];
-    ch1 := frst[1];
-    ch2 := sc[1];
-
-    if ch1<ch2 then begin
-      if (chval>=ch1) and (chval<=ch2) then
-        Result := bprSuccess
-      else
-        Result := bprNoMatch;
-    end else begin
-      if (chval>=ch2) and (chval<=ch1) then
-        Result := bprSuccess
-      else
-        Result := bprNoMatch;
-    end;
-  end;
-  *)
 end;
 
 
@@ -1010,8 +843,6 @@ begin
   inc(i);
   j:=i;
 
-  //if i<length(pat)-2 and pat[i+1]='.' and pat[i+2]='.' and not in pat[i+3]
-
   lvl:=0;
   while (i<=length(pat)) do begin
     case pat[i] of
@@ -1057,13 +888,12 @@ end;
 
 function BracePattern(const pat: string; var pidx: integer; MajPatLen: integer; const s: string; var sidx: integer): TBracePatResult;
 var
-  i,j,wofs: integer;
-  si : integer;
-  bi : TBraceInfo;
+  i,j      : integer;
+  si,wofs  : integer;
+  bi       : TBraceInfo;
   rescheck : Boolean;
-  //len : integer;
-  patlen : integer;
-  initpidx: integer;
+  patlen   : integer;
+  initpidx : integer;
 begin
   if not BracePatternInfo(pat, pidx, bi) then begin
     Result := bprErrorSyntax;
