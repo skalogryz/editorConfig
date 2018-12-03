@@ -176,10 +176,6 @@ begin
 end;
 
 function TEditorConfigHandle.Parse(const fullname: string): integer;
-//var
-  //ec  : TEditorConfigFile;
-  //dir : string;
-  //fn  : string;
 begin
   Result := 0;
   if Assigned(lastFound) then lastFound.Free;
@@ -187,29 +183,10 @@ begin
 
   // making full-name relative
 
-//  function LookupEditorConfig(const FileName: WideString; out res: TLookUpResult; IgnoreCase: Boolean = true): Boolean; overload;
-{  if ConfigFile<>'' then begin
-    dir:=IncludeTrailingPathDelimiter(GetCurrentDir);
-    fn :=Copy(fullname, length(dir)+1, length(fullname));
-
-    lastFound:=TEditorconfigEntry.Create('');
-    ec := TEditorConfigFile.Create;
-    try
-      ReadFromFile(ec, ConfigFile, true);
-      if FindMatching(fn, ec, false, lastFound) = 0 then begin
-        lastFound.free;
-        lastFound := nil;
-      end else
-        Result := 0;
-    finally
-      ec.Free;
-    end;
-  end else begin}
-    if not LookupEditorConfig(fullname, lastFound, false, ConfigFile) then begin
-      lastFound.Free;
-      lastfound := nil;
-    end;
-  //end;
+  if not LookupEditorConfig(fullname, lastFound, false, ConfigFile) then begin
+    lastFound.Free;
+    lastfound := nil;
+  end;
 
   if Assigned(lastFound) then
     SetDefaultProps(lastFound, targetVer);
