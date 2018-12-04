@@ -5,7 +5,7 @@ program editorconfig;
 {$mode delphi}{$H+}
 
 uses
-  Windows,
+  {$ifdef mswindows}Windows, ShellApi,{$endif}
   SysUtils, Classes, EditorConfigTypes, EditorConfigUtils, editorconfigcorepas;
 
 procedure Run(file_paths: TStrings; const conf_filename, aversion: string);
@@ -107,11 +107,6 @@ var
   gPrintVersion: Boolean = false;
   gFiles : TStringList = nil;
 
-function ParamStrSafe(i: integer): string;
-begin
-  if (i<0) or (i>ParamCount) then Result := ''
-  else Result := ParamStr(i);
-end;
 procedure PrintVersion;
 begin
   writeln('EditorConfig Pas Core Version '
@@ -135,7 +130,16 @@ begin
   writeln('--version	Display version information.');
 end;
 
-procedure ParseParams;
+type
+  TArguments = array of string;
+
+function ParamStrSafe(args: TArguments; i: integer): string;
+begin
+  if (i<0) or (i>=length(args)) then Result := ''
+  else Result := args[i];
+end;
+
+procedure ParseParams(const args: TArguments);
 var
   i : integer;
   s : string;
@@ -143,14 +147,14 @@ begin
   if not Assigned(gFiles) then gFiles := TStringList.Create;
 
   i:=1;
-  while i<=ParamCount do begin
-    s:=ParamStr(i);
+  while i<length(args) do begin
+    s:=args[i];
     inc(i);
     if s='-f' then begin
-      gConfigFile := ParamStrSafe(i);
+      gConfigFile := ParamStrSafe(args, i);
       inc(i);
     end else if s = '-b' then begin
-      gReqVersion := ParamStrSafe(i);
+      gReqVersion := ParamStrSafe(args, i);
       inc(i);
     end else if (s = '-h') or (s = '--help') then begin
       gPrintHelp := true;
@@ -161,27 +165,43 @@ begin
   end;
 end;
 
+{$ifdef mswindows}
+type
+  TArrayOfPWideChar = array [word] of PWideChar;
+  PArrayOfPWideChar = ^TArrayOfPWideChar;
+{$endif}
+
+function GetArguments: TArguments;
+var
+  i    : integer;
+{$ifdef mswindows}
+  cmdw : PWideChar;
+  argc : Integer;
+  argv : PArrayOfPWideChar;
+  ws   : WideString;
+{$endif}
 begin
+  Result := nil;
+  {$ifdef mswindows}
+  cmdw := GetCommandLineW;
+  argv := PArrayOfPWideChar(CommandLineToArgvW(cmdw, @argc));
+  SetLength(Result, argc);
+  for i:=0 to argc-1 do begin
+    ws := argv[i];
+    Result[i] := UTF8Encode(ws);
+  end;
+  {$else}
+  SetLength(Result, ParamCount+1);
+  for i:=0 to ParamCount do
+    Result[i] := ParamStr(i);
+  {$endif}
+end;
 
-{  AssignFile(f, 'C:\FPC_Laz\editorconfig\cmdline\editorconfig.txt');
-  if not fileexists('C:\FPC_Laz\editorconfig\cmdline\editorconfig.txt')
-    then Rewrite(f)
-    else Append(f);
-  writeln(f,GetCurrentDir);
-  write(f,ParamStr(0));
-  for i:=1 to ParamCount do
-    write(f,' ',ParamStr(i));
-  writeln(f);
-  writeln(f, 'utf8:');
-  ws := PWideChar(GetCommandLineW);
-  writeln(f, UTF8Encode(ws));
-  writeln(f);
-  CloseFile(f);}
-
+begin
   try
     gFiles := TStringList.Create;
     try
-      ParseParams;
+      ParseParams(GetArguments);
       if gPrintVersion then begin
         PrintVersion;
         Exit;

@@ -21,11 +21,11 @@ type
     insert_final_newline     : TTriBool; //
   end;
 
-function LookupEditorConfig(const FileName: RawByteString; out res: TEditorConfigEntry;
+function LookupEditorConfig(const FullName: RawByteString; out res: TEditorConfigEntry;
   IgnoreCase: Boolean = true; const editorConfigName: string = EditorConfig_Name): Boolean; overload;
-function LookupEditorConfig(const FileName: RawByteString; out res: TLookUpResult; IgnoreCase: Boolean = true): Boolean; overload;
-function LookupEditorConfig(const FileName: UnicodeString; out res: TLookUpResult; IgnoreCase: Boolean = true): Boolean; overload;
-function LookupEditorConfig(const FileName: WideString; out res: TLookUpResult; IgnoreCase: Boolean = true): Boolean; overload;
+function LookupEditorConfig(const FullName: RawByteString; out res: TLookUpResult; IgnoreCase: Boolean = true): Boolean; overload;
+function LookupEditorConfig(const FullName: UnicodeString; out res: TLookUpResult; IgnoreCase: Boolean = true): Boolean; overload;
+function LookupEditorConfig(const FullName: WideString; out res: TLookUpResult; IgnoreCase: Boolean = true): Boolean; overload;
 
 procedure FindMatching(const SrchFileName: string; cfg: TEditorConfigFile; IgnoreCase: Boolean; matches: TList); overload;
 
@@ -329,7 +329,7 @@ begin
   FillChar(lk, sizeof(lk), 0);
 end;
 
-function LookupEditorConfig(const FileName: RawByteString;
+function LookupEditorConfig(const FullName: RawByteString;
   out res: TEditorConfigEntry;
   IgnoreCase: Boolean;
   const editorConfigName: string): Boolean; overload;
@@ -343,9 +343,8 @@ var
   srch : string;
   fulln: string;
   i    : integer;
-  m    : TList;
 begin
-  fulln := ExpandFileName(FileName);
+  fulln := FullName;
   Result := false;
   pth := ExtractFilePath(fulln);
   done := false;
@@ -392,18 +391,11 @@ begin
   end;
 end;
 
-function LookupEditorConfig(const FileName: RawByteString; out res: TLookUpResult; IgnoreCase: Boolean): Boolean;
+function LookupEditorConfig(const FullName: RawByteString; out res: TLookUpResult; IgnoreCase: Boolean): Boolean;
 var
-  pp   : string;
-  pth  : string;
-  done : Boolean;
-  cfg  : string;
-  ec   : TEditorConfigFile;
   ent  : TEditorConfigEntry;
-  srch : string;
-  fulln: string;
 begin
-  LookupEditorConfig(FileName, ent, IgnoreCase);
+  LookupEditorConfig(FullName, ent, IgnoreCase);
   Result := Assigned(ent);
   InitLookupResult(res);
   if Result then begin
@@ -412,14 +404,14 @@ begin
   end;
 end;
 
-function LookupEditorConfig(const FileName: UnicodeString; out res: TLookUpResult; IgnoreCase: Boolean): Boolean; overload;
+function LookupEditorConfig(const FullName: UnicodeString; out res: TLookUpResult; IgnoreCase: Boolean): Boolean; overload;
 begin
-  Result := LookupEditorConfig( UTF8Encode(FileName), res, IgnoreCase);
+  Result := LookupEditorConfig( UTF8Encode(FullName), res, IgnoreCase);
 end;
 
-function LookupEditorConfig(const FileName: WideString; out res: TLookUpResult; IgnoreCase: Boolean): Boolean; overload;
+function LookupEditorConfig(const FullName: WideString; out res: TLookUpResult; IgnoreCase: Boolean): Boolean; overload;
 begin
-  Result := LookupEditorConfig( UTF8Encode(FileName), res, IgnoreCase );
+  Result := LookupEditorConfig( UTF8Encode(FullName), res, IgnoreCase );
 end;
 
 end.
